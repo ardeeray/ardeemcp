@@ -1,0 +1,44 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_ARTIFACT_REPO/ardeemcp:$COMMIT_SHA'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_ARTIFACT_REPO/ardeemcp:latest'
+      - '.'
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_ARTIFACT_REPO/ardeemcp'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ardeemcp'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_ARTIFACT_REPO/ardeemcp:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--min-instances=0'
+      - '--max-instances=5'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--set-secrets=MCP_TOKENS=MCP_TOKENS:latest,GOOGLE_AI_API_KEY=GOOGLE_AI_API_KEY:latest,FIREBASE_ADMIN_PROJECT_ID=FIREBASE_ADMIN_PROJECT_ID:latest,FIREBASE_ADMIN_CLIENT_EMAIL=FIREBASE_ADMIN_CLIENT_EMAIL:latest,FIREBASE_ADMIN_PRIVATE_KEY=FIREBASE_ADMIN_PRIVATE_KEY:latest'
+
+substitutions:
+  _REGION: us-central1
+  _ARTIFACT_REPO: ardeemcp
+
+images:
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_ARTIFACT_REPO/ardeemcp:$COMMIT_SHA'
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_ARTIFACT_REPO/ardeemcp:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
