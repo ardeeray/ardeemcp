@@ -581,31 +581,83 @@ Build-step output. Do not edit manually. Run the docs build script to regenerate
 
 See \`conventions://docs-portal-architecture\` section 4 for the full pattern.
 
-Create **src/lib/firestore/adminDocs/adminDocs.ts** — implement \`getAdminDocs()\`, \`createAdminDoc()\`, \`updateAdminDoc()\`, \`deleteAdminDoc()\` using \`getAdminDb()\` from \`src/lib/firebase/admin.ts\`.
+Create **src/lib/firestore/adminDocs/adminDocs.ts** — implement \`listAdminDocs()\`, \`getAdminDocBySlug()\`, \`createAdminDoc()\`, \`updateAdminDoc()\`, \`deleteAdminDoc()\` using \`getAdminDb()\` from \`src/lib/firebase/admin.ts\`.
 
-Create these routes (spec — agent generates MUI forms):
+Create these routes and components:
 
 \`\`\`
 src/app/admin/docs/
-  page.tsx         Server component — list all adminDocs, link to create/edit
-  new/page.tsx     Client component — MUI form with title, content (textarea), category
-  [id]/page.tsx    Server component — view a single doc
-  [id]/edit/page.tsx  Client component — edit form
+  layout.tsx               Server component — loads all docs, renders DocsSidebar + flex main
+  page.tsx                 Server component — stat cards + recently updated list
+  new/page.tsx             Client component — MUI form (title, body, category, slug)
+  [category]/[slug]/
+    page.tsx               Server component — view a single doc (markdown rendered)
+    edit/page.tsx          Client component — edit form
+  _components/
+    DocsSidebar.tsx        Client component — collapsible category tree + live search
 \`\`\`
 
 All routes call \`requireAdminUser()\` before touching data.
 
+### DocsSidebar requirements
+
+\`DocsSidebar\` is a \`"use client"\` component that receives all doc summaries as a prop and handles filtering entirely in-memory — no additional fetches.
+
+\`\`\`
+Props: { docsByCategory: Record<AdminDocCategory, AdminDocSummary[]> }
+\`\`\`
+
+It must include:
+- A \`TextField\` (size="small", fullWidth) at the top with a \`SearchIcon\` start adornment and a clear \`×\` \`IconButton\` end adornment (visible only when query is non-empty)
+- \`useState<string>('')\` for \`searchQuery\`
+- \`useMemo\` that flattens all docs and filters by \`title.toLowerCase().includes(q)\` when query is non-empty — returns \`null\` when empty (no filtering)
+- When \`searchResults !== null\`: render a flat \`List\` where each result shows doc title + secondary category label. Show "No documents found" in italic when array is empty.
+- When \`searchResults === null\`: render the collapsible category tree (MUI \`Collapse\` per category, all open by default)
+- Each item links to \`/admin/docs/\${doc.category}/\${doc.slug}\` and highlights the active route using \`usePathname()\`
+
+### layout.tsx pattern
+
+\`\`\`ts
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+export default async function AdminDocsLayout({ children }: { children: React.ReactNode }) {
+  await requireAdminUser();
+  const docsByCategory = await loadDocsByCategory(); // groups AdminDocSummary[] by category
+  return (
+    <Box sx={{ display: 'flex' }}>
+      <DocsSidebar docsByCategory={docsByCategory} />
+      <Box component="main" sx={{ flex: 1, p: 3 }}>{children}</Box>
+    </Box>
+  );
+}
+\`\`\`
+
 Create shared model **shared/models/${modelNamespace}/adminDoc.ts**:
 \`\`\`ts
+export const ADMIN_DOC_CATEGORIES = [
+  'architecture', 'deploy', 'developer', 'notes', 'security',
+] as const;
+export type AdminDocCategory = typeof ADMIN_DOC_CATEGORIES[number];
+export const ADMIN_DOC_CATEGORY_LABELS: Record<AdminDocCategory, string> = {
+  architecture: 'Architecture',
+  deploy: 'Deploy',
+  developer: 'Developer',
+  notes: 'Notes',
+  security: 'Security',
+};
+
 export type AdminDoc = {
   id: string;
+  slug: string;
   title: string;
-  content: string;
-  category: string;
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy: string;
+  body: string;           // markdown
+  category: AdminDocCategory;
+  order: number;
+  updatedAt: string;      // ISO timestamp
+  createdBy?: string;
 };
+export type AdminDocSummary = Omit<AdminDoc, 'body'>;
 \`\`\`
 
 ---
