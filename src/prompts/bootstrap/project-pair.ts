@@ -156,6 +156,113 @@ Print this checklist for the developer:
 
 ---
 
+## Phase 5 — Cloud Run deployment (ardeemcp token + GCP infra)
+
+### 5a — Add MCP token for this project
+In the ardeemcp repo, add a new token entry to the \`MCP_TOKENS\` secret in Secret Manager (project: ardeemcp-prod):
+\`\`\`
+# Format: projectId:token,projectId2:token2
+# Add: ${flutterProjectName}:<generate a secure random token>
+gcloud secrets versions add MCP_TOKENS --data-file=- --project=ardeemcp-prod
+\`\`\`
+Then redeploy ardeemcp (push to main or run the Cloud Build trigger manually).
+
+### 5b — Create a dedicated GCP project for backend infra (optional but recommended)
+Follow the same pattern used for ardeemcp-prod. Replace \`NEWPROJECT\` with e.g. \`${flutterProjectName.replace(/_/g, '-')}-prod\`.
+
+\`\`\`bash
+# 1. Create project
+gcloud projects create NEWPROJECT --name="NEWPROJECT"
+
+# 2. Link billing (find billing account ID first)
+gcloud billing projects link NEWPROJECT --billing-account=BILLING_ACCOUNT_ID
+
+# 3. Enable APIs
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com \\
+  artifactregistry.googleapis.com secretmanager.googleapis.com \\
+  cloudresourcemanager.googleapis.com iam.googleapis.com \\
+  --project=NEWPROJECT
+
+# 4. Create runtime service account
+gcloud iam service-accounts create ${flutterProjectName.replace(/_/g, '-')}-sa \\
+  --project=NEWPROJECT
+
+# 5. Grant it secret access
+gcloud projects add-iam-policy-binding NEWPROJECT \\
+  --member="serviceAccount:${flutterProjectName.replace(/_/g, '-')}-sa@NEWPROJECT.iam.gserviceaccount.com" \\
+  --role="roles/secretmanager.secretAccessor" --condition=None
+
+# 6. Grant Compute Engine default SA build/deploy roles
+#    (Cloud Build SA may not be pre-created — use Compute SA instead)
+PROJECT_NUMBER=$(gcloud projects describe NEWPROJECT --format="value(projectNumber)")
+COMPUTE_SA="\${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+for role in roles/artifactregistry.writer roles/run.admin roles/iam.serviceAccountUser; do
+  gcloud projects add-iam-policy-binding NEWPROJECT \\
+    --member="serviceAccount:\${COMPUTE_SA}" \\
+    --role="\${role}" --condition=None --quiet
+done
+
+# 7. Create Artifact Registry repo
+gcloud artifacts repositories create ${flutterProjectName.replace(/_/g, '-')} \\
+  --repository-format=docker --location=us-central1 --project=NEWPROJECT
+
+# 8. Create a Firebase SA in the Firebase project for Admin SDK access
+gcloud iam service-accounts create ${flutterProjectName.replace(/_/g, '-')}-firebase \\
+  --project=FIREBASE_PROJECT_ID
+for role in roles/datastore.user roles/storage.objectAdmin; do
+  gcloud projects add-iam-policy-binding FIREBASE_PROJECT_ID \\
+    --member="serviceAccount:${flutterProjectName.replace(/_/g, '-')}-firebase@FIREBASE_PROJECT_ID.iam.gserviceaccount.com" \\
+    --role="\${role}" --condition=None
+done
+
+# 9. Download Firebase SA key → create secrets → delete key immediately
+gcloud iam service-accounts keys create /tmp/firebase-key.json \\
+  --iam-account=${flutterProjectName.replace(/_/g, '-')}-firebase@FIREBASE_PROJECT_ID.iam.gserviceaccount.com \\
+  --project=FIREBASE_PROJECT_ID
+
+printf '%s' "FIREBASE_PROJECT_ID" | gcloud secrets create FIREBASE_ADMIN_PROJECT_ID --data-file=- --project=NEWPROJECT
+jq -r '.client_email' /tmp/firebase-key.json | gcloud secrets create FIREBASE_ADMIN_CLIENT_EMAIL --data-file=- --project=NEWPROJECT
+jq -r '.private_key'  /tmp/firebase-key.json | gcloud secrets create FIREBASE_ADMIN_PRIVATE_KEY  --data-file=- --project=NEWPROJECT
+rm /tmp/firebase-key.json
+\`\`\`
+
+### 5c — cloudbuild.yaml for the portal
+Add a \`cloudbuild.yaml\` to the \`${portal}\` repo:
+\`\`\`yaml
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '\$_REGION-docker.pkg.dev/\$PROJECT_ID/\$_ARTIFACT_REPO/${portal}:\$COMMIT_SHA', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '\$_REGION-docker.pkg.dev/\$PROJECT_ID/\$_ARTIFACT_REPO/${portal}:\$COMMIT_SHA']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${portal}
+      - '--image=\$_REGION-docker.pkg.dev/\$PROJECT_ID/\$_ARTIFACT_REPO/${portal}:\$COMMIT_SHA'
+      - '--region=\$_REGION'
+      - '--platform=managed'
+      - '--min-instances=1'
+      - '--max-instances=5'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--service-account=${flutterProjectName.replace(/_/g, '-')}-sa@NEWPROJECT.iam.gserviceaccount.com'
+      - '--set-secrets=FIREBASE_ADMIN_PROJECT_ID=FIREBASE_ADMIN_PROJECT_ID:latest,...'
+substitutions:
+  _REGION: us-central1
+  _ARTIFACT_REPO: ${flutterProjectName.replace(/_/g, '-')}
+options:
+  logging: CLOUD_LOGGING_ONLY
+\`\`\`
+
+### 5d — Connect GitHub + trigger
+1. In Cloud Build console (project: NEWPROJECT): **Repositories → Connect Repository** → GitHub → select \`${portal}\`
+2. Create trigger: branch \`^main$\`, config \`cloudbuild.yaml\`, SA = Compute Engine default
+3. Run trigger → verify \`/health\` endpoint returns \`{"status":"ok"}\`
+
+---
+
 ## Directory structure (final)
 
 \`\`\`
