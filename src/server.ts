@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { randomUUID } from 'crypto';
 import 'dotenv/config';
 
@@ -36,6 +37,14 @@ async function startSse(): Promise<void> {
   const app = express();
   app.use(express.json());
   app.use(authMiddleware);
+
+  const mcpLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use('/mcp', mcpLimiter);
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', version: '1.0.0' });

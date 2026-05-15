@@ -12,6 +12,10 @@ import { nodejsMcpServerConventions } from './nodejs-mcp-server.js';
 import { errorCaptureConventions } from './error-capture.js';
 import { stubPatternConventions } from './stub-pattern.js';
 import { securityReviewConventions } from './security-review.js';
+import { agentPersonaConventions } from './agent-persona.js';
+import { stagingSimulationConventions } from './staging-simulation.js';
+import { sharedFirestoreContractConventions } from './shared-firestore-contract.js';
+import { docsPortalArchitectureConventions } from './docs-portal-architecture.js';
 
 function hash(content: string): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 12);
@@ -40,6 +44,10 @@ export function manifestResource(): { version: string; conventions: ConventionEn
       { uri: 'conventions://error-capture', name: 'Error Capture Process', hash: hash(errorCaptureConventions) },
       { uri: 'conventions://stub-pattern', name: 'Mock/Real Stub Pattern (Flutter + Portal)', hash: hash(stubPatternConventions) },
       { uri: 'conventions://security-review', name: 'Security Review Checklist', hash: hash(securityReviewConventions) },
+      { uri: 'conventions://agent-persona', name: 'Agent Persona Files', hash: hash(agentPersonaConventions) },
+      { uri: 'conventions://staging-simulation', name: 'Staging Simulation Patterns', hash: hash(stagingSimulationConventions) },
+      { uri: 'conventions://shared-firestore-contract', name: 'Shared Firestore Contract', hash: hash(sharedFirestoreContractConventions) },
+      { uri: 'conventions://docs-portal-architecture', name: 'Docs-Portal Architecture', hash: hash(docsPortalArchitectureConventions) },
     ],
   };
 }

@@ -55,8 +55,10 @@ export async function generateImage(rawInput: unknown): Promise<CallToolResult> 
     metadata: { contentType: mimeType },
   });
 
-  await file.makePublic();
-  const url = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  const [url] = await file.getSignedUrl({
+    action: 'read',
+    expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
 
   // Write to Firestore
   const db = getFirestore();

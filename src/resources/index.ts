@@ -12,6 +12,10 @@ import { nodejsMcpServerConventions } from './nodejs-mcp-server.js';
 import { errorCaptureConventions } from './error-capture.js';
 import { stubPatternConventions } from './stub-pattern.js';
 import { securityReviewConventions } from './security-review.js';
+import { agentPersonaConventions } from './agent-persona.js';
+import { stagingSimulationConventions } from './staging-simulation.js';
+import { sharedFirestoreContractConventions } from './shared-firestore-contract.js';
+import { docsPortalArchitectureConventions } from './docs-portal-architecture.js';
 import { manifestResource } from './manifest.js';
 
 export function registerResources(server: McpServer): void {
@@ -104,6 +108,34 @@ export function registerResources(server: McpServer): void {
     'conventions://security-review',
     { description: 'Security review checklist: auth, Firestore rules, API routes, Cloud Functions, env, headers, OWASP Top 10', mimeType: 'text/plain' },
     async () => ({ contents: [{ uri: 'conventions://security-review', text: securityReviewConventions, mimeType: 'text/plain' }] })
+  );
+
+  server.registerResource(
+    'conventions-agent-persona',
+    'conventions://agent-persona',
+    { description: 'Agent persona file conventions: frontmatter, required body sections, rules, and decision-capture trigger', mimeType: 'text/plain' },
+    async () => ({ contents: [{ uri: 'conventions://agent-persona', text: agentPersonaConventions, mimeType: 'text/plain' }] })
+  );
+
+  server.registerResource(
+    'conventions-staging-simulation',
+    'conventions://staging-simulation',
+    { description: 'Staging simulation patterns: two-step auth, SimWriter invariant, mark-and-sweep cleanup, isolate-based concurrency', mimeType: 'text/plain' },
+    async () => ({ contents: [{ uri: 'conventions://staging-simulation', text: stagingSimulationConventions, mimeType: 'text/plain' }] })
+  );
+
+  server.registerResource(
+    'conventions-shared-firestore-contract',
+    'conventions://shared-firestore-contract',
+    { description: 'Shared Firestore contract patterns: silent breakage modes, schema-doc-as-contract, camelCase, manual type sync, 6-step schema-change workflow', mimeType: 'text/plain' },
+    async () => ({ contents: [{ uri: 'conventions://shared-firestore-contract', text: sharedFirestoreContractConventions, mimeType: 'text/plain' }] })
+  );
+
+  server.registerResource(
+    'conventions-docs-portal-architecture',
+    'conventions://docs-portal-architecture',
+    { description: 'Companion portal docs-as-routes pattern, adminDocs CMS, and cross-repo reference conventions', mimeType: 'text/plain' },
+    async () => ({ contents: [{ uri: 'conventions://docs-portal-architecture', text: docsPortalArchitectureConventions, mimeType: 'text/plain' }] })
   );
 
   server.registerResource(
